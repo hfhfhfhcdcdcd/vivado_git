@@ -9,10 +9,8 @@ output reg tx_done
     );
 /*-----------------------变量的声明-----------------------------*/
 reg [31:0] cnt;//基本计数器
-reg [3:0] cnt2;//2级定时器 
-reg [31:0] cnt3;//tx_done的定时器 
-reg [31:0] time_cnt;
-
+reg [3:0] cnt2;//2级定时器
+reg [31:0] time_cnt ;
 /*-----------------------设置时间间隔-----------------------------*/ 
 always@(*)
 if(!rst_n)
@@ -34,18 +32,7 @@ else if(send_en)
     else
         cnt<=cnt+1;
 else//!send_en
-    cnt<=32'd0;   
-/*-----------------------tx_done计数器-----------------------------*/
-always@(posedge sys_clk or negedge rst_n)
-if(!rst_n)
-    cnt3<=32'd0;
-else if(tx_done)
-    if(cnt3==time_cnt-1)
-        cnt3<=32'd0;
-    else
-        cnt3<=cnt3+1;
-else//!tx_done
-    cnt3<=32'd0;       
+    cnt<=32'd0;         
 /*-----------------------2级计数器-----------------------------*/
 always@(posedge sys_clk or negedge rst_n)
 if(!rst_n)
@@ -56,23 +43,24 @@ else if(send_en)begin
             cnt2<=cnt2+1;
         else  
             cnt2<=cnt2;
-     end
-     else if(cnt2==10)
-        cnt2<=0;//cnt2的清零
-     else  
+     end                                           //这里不用清零，因为cnt2==9且cnt==time_cnt-1的时候，tx_done会拉高，                                                                              
+     else                                          //直到cnt2==10且cnt==time_cnt-1的时候，tx_done会再次拉低，此时send_en拉高       
             cnt2<=cnt2;
 end
 else //!send_en
-    cnt2<=4'd0;
+    if((cnt2==10)&&(cnt==time_cnt-1))
+        cnt2<=0;
+    else
+        cnt2<=cnt2;
 /*-----------------------uart_tx-----------------------------*/
 always@(posedge sys_clk or negedge rst_n)
 if(!rst_n)begin
     uart_tx<=0;
     tx_done<=0;
     end
-else
+else if(send_en)begin
     case(cnt2)
-        0: begin uart_tx<=0; tx_done<=0; end                        
+        0: begin uart_tx<=0;end                        
         1:  uart_tx<=data[0] ;                  
         2:  uart_tx<=data[1] ;                  
         3:  uart_tx<=data[2] ;                  
@@ -81,20 +69,13 @@ else
         6:  uart_tx<=data[5] ;                  
         7:  uart_tx<=data[6] ;                  
         8:  uart_tx<=data[7] ;                  
-        9:  begin uart_tx<=1 ; tx_done<=1; end      
+        9:  begin uart_tx<=1 ; tx_done<=1; end
+        10:  begin uart_tx<=1 ; tx_done<=0; end     
         default:begin uart_tx<=1;tx_done<=0; end     // cnt2发完第9位，就会加到10，加到10,cnt2会立马清零。在还没清零的时钟里，
-      endcase                                        //uart_tx会保持“1”，否则（0）就相当于在发送“start位”
-/*-----------------------tx_done-----------------------------*/
-always@(posedge sys_clk or negedge rst_n)
-if(!rst_n)
-    tx_done<=0;
-else begin
-    case(cnt2)
-        0:  tx_done<=0;                                     
-        9:  tx_done<=1;       
-        default:tx_done<=0;
-    endcase
-end
+      endcase
+end                                                  //uart_tx会保持“1”，否则（0）就相当于在发送“start位”
+else//!send_en
+    begin uart_tx<=1;tx_done<=0; end
 endmodule                                         
 
 
