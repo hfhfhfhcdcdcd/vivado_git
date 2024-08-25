@@ -1,0 +1,100 @@
+module uart_data_tx(                           
+input sys_clk         ,          
+input rst_n           ,          
+input [2:0] time_set  ,   //基础计数器的设置       
+input [7:0] data      ,          
+input send_en         ,          
+output reg uart_tx    ,          
+output reg tx_done  
+    );
+/*-----------------------变量的声明-----------------------------*/
+reg [31:0] cnt;//基本计数器
+reg [3:0] cnt2;//2级定时器 
+reg [31:0] cnt3;//tx_done的定时器 
+reg [31:0] time_cnt;
+
+/*-----------------------设置时间间隔-----------------------------*/ 
+always@(*)
+if(!rst_n)
+    time_cnt<=4800;
+else 
+    case(time_set)  
+        0:time_cnt<=10416;                 //4800; 
+        1:time_cnt<=5208;                  //9600; 
+        2:time_cnt<=434;                   //115200;
+        default:time_cnt<=434;             //115200;
+    endcase
+/*-----------------------基本计数器-----------------------------*/
+always@(posedge sys_clk or negedge rst_n)
+if(!rst_n)
+    cnt<=32'd0;
+else if(send_en)
+    if(cnt==time_cnt-1)
+        cnt<=32'd0;
+    else
+        cnt<=cnt+1;
+else//!send_en
+    cnt<=32'd0;   
+/*-----------------------tx_done计数器-----------------------------*/
+always@(posedge sys_clk or negedge rst_n)
+if(!rst_n)
+    cnt3<=32'd0;
+else if(tx_done)
+    if(cnt3==time_cnt-1)
+        cnt3<=32'd0;
+    else
+        cnt3<=cnt3+1;
+else//!tx_done
+    cnt3<=32'd0;       
+/*-----------------------2级计数器-----------------------------*/
+always@(posedge sys_clk or negedge rst_n)
+if(!rst_n)
+    cnt2<=4'd0;//默认发start位
+else if(send_en)begin
+    if((cnt2>=0)&&(cnt2<10))begin
+        if(cnt==time_cnt-1)
+            cnt2<=cnt2+1;
+        else  
+            cnt2<=cnt2;
+     end
+     else if(cnt2==10)
+        cnt2<=0;//cnt2的清零
+     else  
+            cnt2<=cnt2;
+end
+else //!send_en
+    cnt2<=4'd0;
+/*-----------------------uart_tx-----------------------------*/
+always@(posedge sys_clk or negedge rst_n)
+if(!rst_n)begin
+    uart_tx<=0;
+    tx_done<=0;
+    end
+else
+    case(cnt2)
+        0: begin uart_tx<=0; tx_done<=0; end                        
+        1:  uart_tx<=data[0] ;                  
+        2:  uart_tx<=data[1] ;                  
+        3:  uart_tx<=data[2] ;                  
+        4:  uart_tx<=data[3] ;                  
+        5:  uart_tx<=data[4] ;                  
+        6:  uart_tx<=data[5] ;                  
+        7:  uart_tx<=data[6] ;                  
+        8:  uart_tx<=data[7] ;                  
+        9:  begin uart_tx<=1 ; tx_done<=1; end      
+        default:begin uart_tx<=1;tx_done<=0; end     // cnt2发完第9位，就会加到10，加到10,cnt2会立马清零。在还没清零的时钟里，
+      endcase                                        //uart_tx会保持“1”，否则（0）就相当于在发送“start位”
+/*-----------------------tx_done-----------------------------*/
+always@(posedge sys_clk or negedge rst_n)
+if(!rst_n)
+    tx_done<=0;
+else begin
+    case(cnt2)
+        0:  tx_done<=0;                                     
+        9:  tx_done<=1;       
+        default:tx_done<=0;
+    endcase
+end
+endmodule                                         
+
+
